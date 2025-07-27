@@ -12,7 +12,9 @@ import {
   CircularProgress,
   Divider,
   Container,
-  Button
+  Button,
+  Card,
+  CardContent
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
@@ -26,6 +28,7 @@ import {
 function PhotoAnalysis({ image, onImageUpload }) {
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(true);
+  const [photoType, setPhotoType] = useState(null);
 
   const technicalSpecs = useMemo(() => ({
     composition: {
@@ -307,13 +310,185 @@ function PhotoAnalysis({ image, onImageUpload }) {
     }
   }), []);
 
+  const cameraSettings = useMemo(() => ({
+    landscape: {
+      title: "Landscape Photography",
+      focalLength: "14-35mm (wide angle)",
+      iso: "100-400",
+      exposureTime: "1/60 - 1/250",
+      additional: [
+        "Use smaller apertures (f/8-f/16) for greater depth of field",
+        "Consider using ND filters for longer exposures",
+        "Use tripod for maximum sharpness"
+      ]
+    },
+    portrait: {
+      title: "Portrait Photography",
+      focalLength: "50-135mm",
+      iso: "100-800",
+      exposureTime: "1/125 - 1/250",
+      additional: [
+        "Use wider apertures (f/1.8-f/4) for background blur",
+        "Consider using reflectors for fill light",
+        "Focus on the nearest eye"
+      ]
+    },
+    action: {
+      title: "Action/Sports Photography",
+      focalLength: "70-300mm",
+      iso: "400-3200",
+      exposureTime: "1/500 - 1/2000",
+      additional: [
+        "Use continuous autofocus (AI Servo)",
+        "Enable high-speed continuous shooting",
+        "Consider using monopod for stability"
+      ]
+    },
+    macro: {
+      title: "Macro Photography",
+      focalLength: "90-180mm macro",
+      iso: "100-400",
+      exposureTime: "1/60 - 1/250",
+      additional: [
+        "Use focus stacking for greater depth of field",
+        "Consider using ring light or twin flash",
+        "Use manual focus for precise control"
+      ]
+    }
+  }), []);
+
+  const determinePhotoType = (imageData, analysisResults) => {
+    const { width, height } = imageData;
+    const aspectRatio = width / height;
+    const { regions } = analysisResults.composition;
+    const { averageEdgeStrength } = analysisResults.clarity;
+    const { histogram, underexposed, overexposed } = analysisResults.brightness;
+    const { colorVariety, averageSaturation } = analysisResults.color;
+
+    // Extract EXIF data from image if available
+    const currentSettings = {
+      resolution: `${width} × ${height}`,
+      aspectRatio: aspectRatio.toFixed(2),
+      brightness: `${Math.round((1 - underexposed/100) * 100)}%`,
+      sharpness: `${Math.round(averageEdgeStrength)}%`,
+      colorSaturation: `${Math.round(averageSaturation * 100)}%`,
+      contrast: `${Math.round((1 - Math.abs(underexposed - overexposed)/100) * 100)}%`
+    };
+
+    // Analyze characteristics to determine photo type
+    let type = {
+      name: '',
+      confidence: 0,
+      settings: {},
+      currentSettings: currentSettings  // Add current settings to the type object
+    };
+
+    // Check for landscape characteristics
+    if (aspectRatio > 1.3 && colorVariety > 0.6) {
+      type = {
+        name: 'Landscape',
+        confidence: 0.8,
+        currentSettings,
+        settings: {
+          focalLength: width > 3000 ? "14-24mm" : "24-35mm",
+          iso: underexposed > 30 ? "400-800" : "100-400",
+          exposureTime: overexposed > 30 ? "1/1000 - 1/2000" : "1/60 - 1/250",
+          aperture: "f/8 - f/16",
+          tips: [
+            `${underexposed > 30 ? "Consider using HDR for high contrast scenes" : "Good dynamic range maintained"}`,
+            `${aspectRatio > 1.5 ? "Wide panoramic composition detected" : "Standard landscape ratio detected"}`,
+            `${colorVariety > 0.7 ? "Rich color variety - consider polarizing filter" : "Moderate colors - enhance in post"}`
+          ]
+        }
+      };
+    }
+    // Check for portrait characteristics
+    else if (aspectRatio < 1.2 && averageEdgeStrength > 50) {
+      type = {
+        name: 'Portrait',
+        confidence: 0.85,
+        currentSettings,
+        settings: {
+          focalLength: width > 2500 ? "85-135mm" : "50-85mm",
+          iso: averageEdgeStrength < 70 ? "400-800" : "100-400",
+          exposureTime: "1/125 - 1/250",
+          aperture: "f/1.8 - f/4",
+          tips: [
+            `${averageEdgeStrength > 80 ? "Sharp focus detected - good eye detail" : "Increase sharpness for better eye detail"}`,
+            `${aspectRatio < 0.8 ? "Portrait orientation optimal" : "Consider tighter cropping"}`,
+            `${averageSaturation > 0.6 ? "Good skin tone saturation" : "Adjust white balance for better skin tones"}`
+          ]
+        }
+      };
+    }
+    // Check for action/sports characteristics
+    else if (averageEdgeStrength < 40 || (histogram && histogram.some(h => h > 1000))) {
+      type = {
+        name: 'Action',
+        confidence: 0.75,
+        currentSettings,
+        settings: {
+          focalLength: width > 4000 ? "200-400mm" : "70-200mm",
+          iso: "800-3200",
+          exposureTime: "1/500 - 1/2000",
+          aperture: "f/2.8 - f/4",
+          tips: [
+            `${averageEdgeStrength < 30 ? "Motion blur detected - increase shutter speed" : "Good motion freeze"}`,
+            "Enable continuous autofocus (AI Servo)",
+            `${width > 4000 ? "Long lens - use monopod for stability" : "Consider closer positioning"}`
+          ]
+        }
+      };
+    }
+    // Check for macro characteristics
+    else if (averageEdgeStrength > 80 && regions.some(r => r.weight > 0.4)) {
+      type = {
+        name: 'Macro',
+        confidence: 0.9,
+        currentSettings,
+        settings: {
+          focalLength: "90-180mm macro",
+          iso: averageEdgeStrength > 90 ? "100-200" : "200-400",
+          exposureTime: "1/60 - 1/250",
+          aperture: "f/8 - f/16",
+          tips: [
+            `${averageEdgeStrength > 90 ? "Excellent detail - maintain technique" : "Consider focus stacking"}`,
+            `${regions.some(r => r.weight > 0.5) ? "Strong subject isolation" : "Improve background separation"}`,
+            "Use manual focus for precise control"
+          ]
+        }
+      };
+    }
+    // Default/General photography
+    else {
+      type = {
+        name: 'General',
+        confidence: 0.7,
+        currentSettings,
+        settings: {
+          focalLength: "35-70mm",
+          iso: underexposed > 30 ? "400-1600" : "100-400",
+          exposureTime: "1/60 - 1/250",
+          aperture: "f/4 - f/8",
+          tips: [
+            `${underexposed > 30 ? "Increase exposure or use artificial lighting" : "Good exposure balance"}`,
+            `${averageEdgeStrength < 50 ? "Increase sharpness" : "Good overall sharpness"}`,
+            `${colorVariety < 0.4 ? "Consider color composition" : "Good color variety"}`
+          ]
+        }
+      };
+    }
+
+    return type;
+  };
+
   useEffect(() => {
     const analyzeImage = async () => {
       setIsAnalyzing(true);
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const img = new Image();
-
+      
       img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
@@ -325,6 +500,20 @@ function PhotoAnalysis({ image, onImageUpload }) {
         const clarityAnalysis = analyzeClarity(imageData, canvas.width, canvas.height);
         const colorAnalysis = analyzeColor(imageData);
         const compositionAnalysis = analyzeComposition(imageData, canvas.width, canvas.height);
+
+        const analysisResults = {
+          brightness: brightnessAnalysis,
+          clarity: clarityAnalysis,
+          color: colorAnalysis,
+          composition: compositionAnalysis
+        };
+
+        // Determine photo type and optimal settings
+        const photoTypeInfo = determinePhotoType(
+          { width: canvas.width, height: canvas.height },
+          analysisResults
+        );
+        setPhotoType(photoTypeInfo);
 
         // Calculate scores for each category
         const scores = {
@@ -359,7 +548,7 @@ function PhotoAnalysis({ image, onImageUpload }) {
     if (image && image.dataUrl) {
       analyzeImage();
     }
-  }, [image, analysisWeights, technicalSpecs]);
+  }, [image]);
 
   const getFeedbackTemplate = (category, score) => {
     const templates = {
@@ -664,6 +853,195 @@ function PhotoAnalysis({ image, onImageUpload }) {
       feedback: data.feedback.slice(0, 2)
     }));
 
+  const renderCameraSettings = () => {
+    if (!photoType) return null;
+
+    return (
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            textAlign: 'center',
+            mb: 3,
+            fontWeight: 500,
+            position: 'relative',
+            '&:after': {
+              content: '""',
+              position: 'absolute',
+              bottom: '-8px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '60px',
+              height: '3px',
+              background: 'linear-gradient(90deg, #2196F3 0%, #21CBF3 100%)',
+              borderRadius: '2px'
+            }
+          }}
+        >
+          Camera Settings Analysis
+        </Typography>
+        <Card 
+          sx={{ 
+            bgcolor: 'background.paper',
+            borderRadius: 2,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}
+        >
+          <CardContent>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: 'primary.main',
+                  fontWeight: 600
+                }}
+              >
+                {photoType.name} Photography
+              </Typography>
+              <Chip 
+                label={`${Math.round(photoType.confidence * 100)}% confidence`}
+                color={photoType.confidence > 0.8 ? "success" : "primary"}
+                size="small"
+              />
+            </Box>
+            
+            <Grid container spacing={3}>
+              {/* Current Photo Specifications */}
+              <Grid item xs={12} md={4}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Current Photo Specifications
+                  </Typography>
+                  <Box sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'error.light' }}>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Resolution
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.resolution}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Aspect Ratio
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.aspectRatio}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Brightness
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.brightness}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Sharpness
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.sharpness}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Color Saturation
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.colorSaturation}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Contrast
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.currentSettings.contrast}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+
+              {/* Recommended Settings */}
+              <Grid item xs={12} md={4}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Recommended Settings
+                  </Typography>
+                  <Box sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'success.light' }}>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Focal Length
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.settings.focalLength}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        ISO
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.settings.iso}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Exposure Time
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.settings.exposureTime}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Aperture
+                      </Typography>
+                      <Typography variant="body1">
+                        {photoType.settings.aperture}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              {/* Optimization Tips */}
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Optimization Tips
+                </Typography>
+                <Box sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'info.light' }}>
+                  {photoType.settings.tips.map((tip, index) => (
+                    <Typography
+                      key={index}
+                      variant="body2"
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        mb: 1,
+                        '&:before': {
+                          content: '"•"',
+                          mr: 1,
+                          color: 'primary.main'
+                        }
+                      }}
+                    >
+                      {tip}
+                    </Typography>
+                  ))}
+                </Box>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  };
+
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Box sx={{ 
@@ -908,256 +1286,259 @@ function PhotoAnalysis({ image, onImageUpload }) {
               </Grid>
             ))}
           </Grid>
-        </Box>
 
-        {/* Summary Section */}
-        <Box sx={{ 
-          p: 4, 
-          bgcolor: 'rgba(0, 0, 0, 0.02)', 
-          borderTop: '1px solid rgba(0, 0, 0, 0.08)'
-        }}>
-          <Typography 
-            variant="h6" 
-            gutterBottom 
-            sx={{ 
-              fontWeight: 500,
-              mb: 3,
-              textAlign: 'center',
-              position: 'relative',
-              '&:after': {
-                content: '""',
-                position: 'absolute',
-                bottom: '-8px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '60px',
-                height: '3px',
-                background: 'linear-gradient(90deg, #2196F3 0%, #21CBF3 100%)',
-                borderRadius: '2px'
-              }
-            }}
-          >
-            Analysis Summary
-          </Typography>
+          {/* Camera Settings Section */}
+          {renderCameraSettings()}
 
-          <Grid container spacing={4}>
-            {/* Strengths Section */}
-            <Grid item xs={12} md={6}>
-              <Box sx={{
-                height: '100%',
-                p: 3,
-                bgcolor: 'background.paper',
-                borderRadius: 2,
-                border: '1px solid rgba(25, 118, 210, 0.12)',
-                position: 'relative',
-                overflow: 'hidden',
-                '&:before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '4px',
-                  background: 'linear-gradient(90deg, #2196F3 0%, #21CBF3 100%)'
-                }
-              }}>
-                <Typography 
-                  variant="subtitle1" 
-                  gutterBottom 
-                  sx={{ 
-                    fontWeight: 600,
-                    color: '#1976D2',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    mb: 2
-                  }}
-                >
-                  <Box 
-                    component="span" 
-                    sx={{ 
-                      width: 24, 
-                      height: 24, 
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'rgba(25, 118, 210, 0.12)',
-                      color: '#1976D2',
-                      fontSize: '0.875rem',
-                      fontWeight: 700
-                    }}
-                  >
-                    {strengths.length}
-                  </Box>
-                  Key Strengths
-                </Typography>
-                <Box sx={{ 
-                  pl: 2, 
-                  borderLeft: '2px solid rgba(25, 118, 210, 0.12)'
-                }}>
-                  {strengths.length > 0 ? (
-                    strengths.map(({ category, score, feedback }, index) => (
-                      <Box key={category} sx={{ mb: index !== strengths.length - 1 ? 2 : 0 }}>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            fontWeight: 500,
-                            color: 'text.primary',
-                            mb: 0.5
-                          }}
-                        >
-                          {category} ({score.toFixed(1)}/10)
-                        </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: 'text.secondary',
-                            lineHeight: 1.5
-                          }}
-                        >
-                          {feedback.join('. ')}
-                        </Typography>
-                      </Box>
-                    ))
-                  ) : (
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: 'text.secondary',
-                        fontStyle: 'italic'
-                      }}
-                    >
-                      Keep practicing! Focus on implementing the suggested improvements to enhance your photography skills.
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* Areas for Improvement Section */}
-            <Grid item xs={12} md={6}>
-              <Box sx={{
-                height: '100%',
-                p: 3,
-                bgcolor: 'background.paper',
-                borderRadius: 2,
-                border: '1px solid rgba(211, 47, 47, 0.12)',
-                position: 'relative',
-                overflow: 'hidden',
-                '&:before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '4px',
-                  background: 'linear-gradient(90deg, #D32F2F 0%, #FF5252 100%)'
-                }
-              }}>
-                <Typography 
-                  variant="subtitle1" 
-                  gutterBottom 
-                  sx={{ 
-                    fontWeight: 600,
-                    color: '#D32F2F',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    mb: 2
-                  }}
-                >
-                  <Box 
-                    component="span" 
-                    sx={{ 
-                      width: 24, 
-                      height: 24, 
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'rgba(211, 47, 47, 0.12)',
-                      color: '#D32F2F',
-                      fontSize: '0.875rem',
-                      fontWeight: 700
-                    }}
-                  >
-                    {improvements.length}
-                  </Box>
-                  Areas for Improvement
-                </Typography>
-                <Box sx={{ 
-                  pl: 2, 
-                  borderLeft: '2px solid rgba(211, 47, 47, 0.12)'
-                }}>
-                  {improvements.length > 0 ? (
-                    improvements.map(({ category, score, feedback }, index) => (
-                      <Box key={category} sx={{ mb: index !== improvements.length - 1 ? 2 : 0 }}>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            fontWeight: 500,
-                            color: 'text.primary',
-                            mb: 0.5
-                          }}
-                        >
-                          {category} ({score.toFixed(1)}/10)
-                        </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: 'text.secondary',
-                            lineHeight: 1.5
-                          }}
-                        >
-                          {feedback.join('. ')}
-                        </Typography>
-                      </Box>
-                    ))
-                  ) : (
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: 'text.secondary',
-                        fontStyle: 'italic'
-                      }}
-                    >
-                      Excellent work! Your photo demonstrates strong technical and artistic qualities across all aspects.
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            </Grid>
-          </Grid>
-
-          {/* Upload Another Photo Button */}
+          {/* Summary Section */}
           <Box sx={{ 
-            mt: 4, 
-            pt: 4, 
-            borderTop: '1px solid rgba(0, 0, 0, 0.08)',
-            display: 'flex',
-            justifyContent: 'center'
+            p: 4, 
+            bgcolor: 'rgba(0, 0, 0, 0.02)', 
+            borderTop: '1px solid rgba(0, 0, 0, 0.08)'
           }}>
-            <Button
-              variant="contained"
-              startIcon={<AddPhotoAlternateIcon />}
-              onClick={handleNewUpload}
-              sx={{
-                bgcolor: '#1976D2',
-                color: 'white',
-                px: 4,
-                py: 1.5,
-                borderRadius: 2,
-                textTransform: 'none',
-                fontSize: '1rem',
+            <Typography 
+              variant="h6" 
+              gutterBottom 
+              sx={{ 
                 fontWeight: 500,
-                '&:hover': {
-                  bgcolor: '#1565C0'
+                mb: 3,
+                textAlign: 'center',
+                position: 'relative',
+                '&:after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: '-8px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '60px',
+                  height: '3px',
+                  background: 'linear-gradient(90deg, #2196F3 0%, #21CBF3 100%)',
+                  borderRadius: '2px'
                 }
               }}
             >
-              Analyze Another Photo
-            </Button>
+              Analysis Summary
+            </Typography>
+
+            <Grid container spacing={4}>
+              {/* Strengths Section */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{
+                  height: '100%',
+                  p: 3,
+                  bgcolor: 'background.paper',
+                  borderRadius: 2,
+                  border: '1px solid rgba(25, 118, 210, 0.12)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&:before': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '4px',
+                    background: 'linear-gradient(90deg, #2196F3 0%, #21CBF3 100%)'
+                  }
+                }}>
+                  <Typography 
+                    variant="subtitle1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 600,
+                      color: '#1976D2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      mb: 2
+                    }}
+                  >
+                    <Box 
+                      component="span" 
+                      sx={{ 
+                        width: 24, 
+                        height: 24, 
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'rgba(25, 118, 210, 0.12)',
+                        color: '#1976D2',
+                        fontSize: '0.875rem',
+                        fontWeight: 700
+                      }}
+                    >
+                      {strengths.length}
+                    </Box>
+                    Key Strengths
+                  </Typography>
+                  <Box sx={{ 
+                    pl: 2, 
+                    borderLeft: '2px solid rgba(25, 118, 210, 0.12)'
+                  }}>
+                    {strengths.length > 0 ? (
+                      strengths.map(({ category, score, feedback }, index) => (
+                        <Box key={category} sx={{ mb: index !== strengths.length - 1 ? 2 : 0 }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 500,
+                              color: 'text.primary',
+                              mb: 0.5
+                            }}
+                          >
+                            {category} ({score.toFixed(1)}/10)
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'text.secondary',
+                              lineHeight: 1.5
+                            }}
+                          >
+                            {feedback.join('. ')}
+                          </Typography>
+                        </Box>
+                      ))
+                    ) : (
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: 'text.secondary',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        Keep practicing! Focus on implementing the suggested improvements to enhance your photography skills.
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              </Grid>
+
+              {/* Areas for Improvement Section */}
+              <Grid item xs={12} md={6}>
+                <Box sx={{
+                  height: '100%',
+                  p: 3,
+                  bgcolor: 'background.paper',
+                  borderRadius: 2,
+                  border: '1px solid rgba(211, 47, 47, 0.12)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&:before': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '4px',
+                    background: 'linear-gradient(90deg, #D32F2F 0%, #FF5252 100%)'
+                  }
+                }}>
+                  <Typography 
+                    variant="subtitle1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 600,
+                      color: '#D32F2F',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      mb: 2
+                    }}
+                  >
+                    <Box 
+                      component="span" 
+                      sx={{ 
+                        width: 24, 
+                        height: 24, 
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'rgba(211, 47, 47, 0.12)',
+                        color: '#D32F2F',
+                        fontSize: '0.875rem',
+                        fontWeight: 700
+                      }}
+                    >
+                      {improvements.length}
+                    </Box>
+                    Areas for Improvement
+                  </Typography>
+                  <Box sx={{ 
+                    pl: 2, 
+                    borderLeft: '2px solid rgba(211, 47, 47, 0.12)'
+                  }}>
+                    {improvements.length > 0 ? (
+                      improvements.map(({ category, score, feedback }, index) => (
+                        <Box key={category} sx={{ mb: index !== improvements.length - 1 ? 2 : 0 }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 500,
+                              color: 'text.primary',
+                              mb: 0.5
+                            }}
+                          >
+                            {category} ({score.toFixed(1)}/10)
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'text.secondary',
+                              lineHeight: 1.5
+                            }}
+                          >
+                            {feedback.join('. ')}
+                          </Typography>
+                        </Box>
+                      ))
+                    ) : (
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: 'text.secondary',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        Excellent work! Your photo demonstrates strong technical and artistic qualities across all aspects.
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Upload Another Photo Button */}
+            <Box sx={{ 
+              mt: 4, 
+              pt: 4, 
+              borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <Button
+                variant="contained"
+                startIcon={<AddPhotoAlternateIcon />}
+                onClick={handleNewUpload}
+                sx={{
+                  bgcolor: '#1976D2',
+                  color: 'white',
+                  px: 4,
+                  py: 1.5,
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 500,
+                  '&:hover': {
+                    bgcolor: '#1565C0'
+                  }
+                }}
+              >
+                Analyze Another Photo
+              </Button>
+            </Box>
           </Box>
         </Box>
       </Box>
