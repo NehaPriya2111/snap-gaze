@@ -1,0 +1,10 @@
+{
+  "files": {
+    "main.js": "/snap-gaze/static/js/main.d56c9a97.js",
+    "index.html": "/snap-gaze/index.html",
+    "main.d56c9a97.js.map": "/snap-gaze/static/js/main.d56c9a97.js.map"
+  },
+  "entrypoints": [
+    "static/js/main.d56c9a97.js"
+  ]
+}
