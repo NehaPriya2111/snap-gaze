@@ -1,8 +1,8 @@
 {
   "files": {
-    "main.js": "/snap-gaze/static/js/main.cc81845d.js",
-    "index.html": "/snap-gaze/index.html",
-    "main.cc81845d.js.map": "/snap-gaze/static/js/main.cc81845d.js.map"
+    "main.js": "/snapgaze/static/js/main.cc81845d.js",
+    "index.html": "/snapgaze/index.html",
+    "main.cc81845d.js.map": "/snapgaze/static/js/main.cc81845d.js.map"
   },
   "entrypoints": [
     "static/js/main.cc81845d.js"
